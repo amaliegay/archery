@@ -104,6 +104,45 @@ local function disarm(actor, equipment)
 	if lightItemData then tes3.dropItem({ reference = reference, item = equipment.object, itemData = lightItemData, count = lightItemData.count }) end
 end
 
+---@param actor tes3mobileActor|any
+---@return number duration
+local function greavesProtection(actor)
+	log:trace("greavesProtection(%s)", actor.reference.id)
+	local rating = 0
+	local greavesStack = tes3.getEquippedItem({ actor = actor, objectType = tes3.objectType.armor, slot = tes3.armorSlot.greaves })
+	if greavesStack then
+		local greaves = greavesStack.object ---@cast greaves tes3armor
+		local armorRatingMin = 40
+		local armorRating = math.clamp(greaves.armorRating, 0, armorRatingMin) / armorRatingMin
+		rating = armorRating
+		-- x-intercept at (1, 0)
+		-- wearing anything better than a Glass Greaves
+		-- which is with AR 40
+		-- takes no additional knee shot damage
+		--
+		-- y-intercept at (0, 5)
+		-- not wearing greaves takes additional 5 times damage
+	end
+	return math.clamp(-0.5 * math.exp(1.3 * (rating + 1)) + 6.8, 0, math.huge) ---@type number
+end
+
+---@param actor tes3mobileActor|any
+local function slowdown(actor)
+	local duration = math.ceil(greavesProtection(actor) * 2)
+	if duration == 0 then return end
+	local speed = actor.speed.current
+	tes3.modStatistic({ reference = actor, attribute = tes3.attribute.speed, current = -speed })
+	log:trace("slowdown %s at %s to %s for %s seconds", actor.reference.id, speed, actor.speed.current, duration)
+	timer.start({
+		duration = 1,
+		callback = function()
+			tes3.modStatistic({ reference = actor, attribute = tes3.attribute.speed, current = speed / duration })
+			log:trace("recover speed to %s", actor.speed.current)
+		end,
+		iterations = duration - 1,
+	})
+end
+
 local bipNodeNames = {}
 local bipNodesData = {
 	["Head"] = { damageMultiFormula = helmetProtection, nodeOffset = tes3vector3.new(0, 0, 1), radiusApproxi = 1, message = config.headshotMessage },
@@ -111,7 +150,7 @@ local bipNodesData = {
 	["Weapon"] = {
 		damageMultiBase = 1.0,
 		radiusNode = "Bip01 R Hand",
-		radiusApproxi = 3.32,
+		radius = 7.86,
 		additionalEffectChance = config.disarmChance,
 		---@param actor tes3mobileActor
 		additionalEffect = function(actor) disarm(actor, actor.readiedWeapon) end,
@@ -119,12 +158,28 @@ local bipNodesData = {
 	},
 	["Bip01 L Finger1"] = {
 		damageMultiBase = 1.0,
-		radiusNode = "Bip01 R Hand",
-		radiusApproxi = 3.32,
+		radiusNode = "Bip01 L Hand",
+		radius = 7.86,
 		additionalEffectChance = config.disarmChance,
 		---@param actor tes3mobileActor
 		additionalEffect = function(actor) disarm(actor, actor.torchSlot) end,
 		message = "A shot in the hand!",
+	},
+	["Left Knee"] = {
+		damageMultiFormula = greavesProtection,
+		nodeOffset = tes3vector3.new(0, 0, 6),
+		radius = 6,
+		additionalEffectChance = 1,
+		additionalEffect = slowdown,
+		message = "An arrow to the knee!",
+	},
+	["Right Knee"] = {
+		damageMultiFormula = greavesProtection,
+		nodeOffset = tes3vector3.new(0, 0, 6),
+		radius = 6,
+		additionalEffectChance = 1,
+		additionalEffect = slowdown,
+		message = "An arrow to the knee!",
 	},
 }
 for bipNodeName, _ in pairs(bipNodesData) do table.bininsert(bipNodeNames, bipNodeName) end
@@ -192,10 +247,13 @@ local function getBipNodeRadius(ref, bipNodeName)
 	if not ref.data.bipNodesWorldBoundRadius then
 		ref.data.bipNodesWorldBoundRadius = {}
 		for bnName, bipNodeData in pairs(bipNodesData) do
-			local name = bipNodeData.radiusNode or bnName
-			local bp = ref.sceneNode:getObjectByName(name)
-			ref.data.bipNodesWorldBoundRadius[name] = bp and bp.worldBoundRadius
-			log:trace("ref.data.bipNodesWorldBoundRadius[%s] = %s", name, ref.data.bipNodesWorldBoundRadius[name])
+			if not bipNodeData.radius then
+				local name = bipNodeData.radiusNode or bnName
+				local bp = ref.sceneNode:getObjectByName(name)
+				log:trace("bp = %s", bp)
+				log:trace("bp.worldBoundRadius = %s", bp and bp.worldBoundRadius)
+				ref.data.bipNodesWorldBoundRadius[name] = bp and bp.worldBoundRadius
+			end
 		end
 	end
 	bipNodeName = bipNodesData[bipNodeName] and bipNodesData[bipNodeName].radiusNode or bipNodeName
@@ -259,19 +317,28 @@ function controller.projectileHitActor(e)
 	log:debug("projectileHit %s", e.target)
 	local closestBipNodeName, closestDistance = getClosestBipNode(e)
 	if closestBipNodeName == "" then return end
+	local bipNodeData = bipNodesData[closestBipNodeName]
 	--- Compatibility with Pincushion which attach arrow to body parts therefore changing worldBoundRadius
 	local bipNodeWorldBoundRadius = getBipNodeRadius(e.target, closestBipNodeName)
-	local radiusApproxi = bipNodesData[closestBipNodeName].radiusApproxi or 0
+	local radius = bipNodeData.radius
+	if not radius then
+		local radiusApproxi = bipNodeData.radiusApproxi or 0
+		radius = bipNodeWorldBoundRadius + radiusApproxi
+	end
 	log:trace("closest distance to %s = %s", closestBipNodeName, closestDistance)
-	log:trace("%sWorldBoundRadius = %s", closestBipNodeName, bipNodeWorldBoundRadius)
-	if closestDistance <= bipNodeWorldBoundRadius + radiusApproxi then
-		local message = bipNodesData[closestBipNodeName].message
+	log:trace("%s radius = %s", closestBipNodeName, radius)
+	if closestDistance <= radius then
+		local message = bipNodeData.message
 		log:debug(message)
 		tes3.messageBox(message)
 		applyDamage(e, closestBipNodeName)
 		applyEffect(e, closestBipNodeName)
 	end
 end
+
+---This is a hack and not reliable
+---@param mobile tes3mobileCreature|tes3mobileNPC|tes3mobilePlayer
+local function getIfMoving(mobile) return mobile.isFalling or mobile.isJumping or mobile.isMovingBack or mobile.isMovingForward or mobile.isMovingLeft or mobile.isMovingRight or mobile.isRunning end
 
 -- Store the damage value in reference data
 ---@param e damageEventData
@@ -282,10 +349,18 @@ function controller.damage(e)
 	-- Check if the damage was caused by a projectile, but not by a spell, so it must be an arrow or a bolt
 	if not e.projectile or e.magicSourceInstance then return end
 
-	-- Log the damage instead of double the damage since damage is before projectileHitActor
-	e.reference.data.archeryDamage = e.damage
 	log:trace("before damage apply, health: %s", e.reference.mobile.health.current)
 	log:trace("damage: %s", e.damage)
+
+	-- if you're moving, you'll do 20% less damage.
+	local isMoving = getIfMoving(e.attacker)
+	if isMoving then
+		e.damage = (1 - 0.2) * e.damage
+		log:trace("after moving damage reduction: %s", e.damage)
+	end
+
+	-- Log the damage instead of double the damage since damage is before projectileHitActor
+	e.reference.data.archeryDamage = e.damage
 end
 
 return controller
