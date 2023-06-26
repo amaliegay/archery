@@ -92,24 +92,42 @@ local function helmetProtection(actor)
 	return math.clamp(16.4 * math.exp(-0.8 * (rating - 0.4)) - 3.9, 0, math.huge) ---@type number
 end
 
----@param actor tes3mobileActor
-local function disarm(actor)
-	local actorWeapon = actor.readiedWeapon
-	if not actorWeapon then return end
+---@param actor tes3mobileActor|any
+---@param equipment tes3equipmentStack?
+local function disarm(actor, equipment)
+	if not equipment then return end
 	local reference = actor.reference
 	if reference.baseObject.objectType ~= tes3.objectType.npc then return end
 
-	local weaponItemData = actorWeapon.itemData
-	-- Drop the weapon
-	if weaponItemData then tes3.dropItem({ reference = reference, item = actorWeapon.object, itemData = weaponItemData, count = weaponItemData.count }) end
+	local lightItemData = equipment.itemData
+	-- Drop the Light
+	if lightItemData then tes3.dropItem({ reference = reference, item = equipment.object, itemData = lightItemData, count = lightItemData.count }) end
 end
 
-local bipNodeNames = { [1] = "Head", [2] = "Neck", [3] = "Weapon" }
+local bipNodeNames = {}
 local bipNodesData = {
 	["Head"] = { damageMultiFormula = helmetProtection, nodeOffset = tes3vector3.new(0, 0, 1), radiusApproxi = 1, message = config.headshotMessage },
 	["Neck"] = { damageMultiBase = 1.5, message = "A shot in the neck!" },
-	["Weapon"] = { damageMultiBase = 1.0, radiusNode = "Bip01 R Hand", radiusApproxi = 3.32, additionalEffectChance = config.disarmChance, additionalEffect = disarm, message = "A shot in the hand!" },
+	["Weapon"] = {
+		damageMultiBase = 1.0,
+		radiusNode = "Bip01 R Hand",
+		radiusApproxi = 3.32,
+		additionalEffectChance = config.disarmChance,
+		---@param actor tes3mobileActor
+		additionalEffect = function(actor) disarm(actor, actor.readiedWeapon) end,
+		message = "A shot in the hand!",
+	},
+	["Bip01 L Finger1"] = {
+		damageMultiBase = 1.0,
+		radiusNode = "Bip01 R Hand",
+		radiusApproxi = 3.32,
+		additionalEffectChance = config.disarmChance,
+		---@param actor tes3mobileActor
+		additionalEffect = function(actor) disarm(actor, actor.torchSlot) end,
+		message = "A shot in the hand!",
+	},
 }
+for bipNodeName, _ in pairs(bipNodesData) do table.bininsert(bipNodeNames, bipNodeName) end
 
 ---@class archery.calcDistPointToLine.params
 ---@field point tes3vector3
@@ -124,6 +142,7 @@ local bipNodesData = {
 ---@param e archery.calcDistPointToLine.params
 ---@return number distance
 local function calcDistPointToLine(e)
+	log:trace("calcDistPointToLine({ point = %s, lineInit = %s, lineDirection = %s })", e.point, e.lineInit, e.lineDirection)
 	-- The distance of `point` to line x is denoted as `distance`
 	local distance ---@type number
 	-- `point - lineInit` is a vector from `point` to point `lineInit`
@@ -146,10 +165,12 @@ end
 ---@return string closestBipNodeName 
 ---@return number closestDistance 
 local function getClosestBipNode(e)
+	log:trace("getClosestBipNode(e)")
 	local closestBipNodeName = ""
 	local closestDistance = math.huge
 	for _, bipNodeName in ipairs(bipNodeNames) do
 		local bipNode = e.target.sceneNode:getObjectByName(bipNodeName) ---@cast bipNode niNode
+		log:trace("local bipNode = e.target.sceneNode:getObjectByName(%s)", bipNodeName)
 		if bipNode then
 			local offset = bipNodesData[bipNodeName].nodeOffset or tes3vector3.new()
 			local distance = calcDistPointToLine({ point = bipNode.worldBoundOrigin + offset, lineInit = e.collisionPoint, lineDirection = e.mobile.velocity:normalized() })
