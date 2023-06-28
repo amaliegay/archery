@@ -96,12 +96,31 @@ end
 ---@param equipment tes3equipmentStack?
 local function disarm(actor, equipment)
 	if not equipment then return end
+
 	local reference = actor.reference
 	if reference.baseObject.objectType ~= tes3.objectType.npc then return end
 
-	local lightItemData = equipment.itemData
-	-- Drop the Light
-	if lightItemData then tes3.dropItem({ reference = reference, item = equipment.object, itemData = lightItemData, count = lightItemData.count }) end
+	local equipmentItemData = equipment.itemData
+
+	-- Drop the equipment
+	if equipmentItemData then
+		log:trace("disarming %s", equipment.object.id)
+		local createdReference = tes3.dropItem({ reference = reference, item = equipment.object, itemData = equipmentItemData, count = equipmentItemData.count })
+		log:trace("dropped %s", createdReference)
+	end
+end
+
+---@param actor tes3mobileActor|any
+local function drainAttack(actor)
+	actor.attackBonus = actor.attackBonus - 15
+	timer.start({ duration = 15, callback = function() actor.attackBonus = actor.attackBonus + 15 end })
+	log:trace("drainAttack(%s)", actor.reference.id)
+end
+
+---@param actor tes3mobileActor|any
+local function sound(actor)
+	tes3.applyMagicSource({ reference = actor, name = "Shot in the Hand", effects = { { id = tes3.effect.sound, duration = 15, min = 15, max = 15 } } })
+	log:trace("sound(%s)", actor.reference.id)
 end
 
 ---@param actor tes3mobileActor|any
@@ -151,18 +170,25 @@ local bipNodesData = {
 		damageMultiBase = 1.0,
 		radiusNode = "Bip01 R Hand",
 		radius = 7.86,
-		additionalEffectChance = config.disarmChance,
+		additionalEffectChance = 1,
 		---@param actor tes3mobileActor
-		additionalEffect = function(actor) disarm(actor, actor.readiedWeapon) end,
+		additionalEffect = function(actor)
+			-- log:trace("apply disarm weapon effect")
+			-- disarm(actor, actor.readiedWeapon)
+			drainAttack(actor)
+		end,
 		message = "A shot in the hand!",
 	},
 	["Bip01 L Finger1"] = {
 		damageMultiBase = 1.0,
 		radiusNode = "Bip01 L Hand",
 		radius = 7.86,
-		additionalEffectChance = config.disarmChance,
+		additionalEffectChance = 1,
 		---@param actor tes3mobileActor
-		additionalEffect = function(actor) disarm(actor, actor.torchSlot) end,
+		additionalEffect = function(actor)
+			-- disarm(actor, actor.torchSlot) 
+			sound(actor)
+		end,
 		message = "A shot in the hand!",
 	},
 	["Left Knee"] = {
@@ -362,5 +388,28 @@ function controller.damage(e)
 	-- Log the damage instead of double the damage since damage is before projectileHitActor
 	e.reference.data.archeryDamage = e.damage
 end
+
+local function getBowDrawFatigueCost() return 10 end
+
+local function ArcherSim(e)
+	local mobilePlayer = tes3.mobilePlayer
+	local actionData = mobilePlayer.actionData
+	if actionData.animationAttackState ~= 2 then return end
+	if mobilePlayer.fatigue.current > getBowDrawFatigueCost() then return end
+	actionData.animationAttackState = tes3.animationState.hit
+	tes3.messageBox({ message = "You are too fatigued to draw a bow!" })
+end
+
+---@param e mouseButtonDownEventData
+function controller.mouseButtonDown(e)
+	if tes3ui.menuMode() then return end
+	if e.button ~= 0 then return end
+	if not tes3.mobilePlayer.weaponDrawn then return end
+	local readiedWeapon = tes3.mobilePlayer.readiedWeapon
+	if not readiedWeapon then return end
+	if readiedWeapon.object.type ~= tes3.weaponType.marksmanBow then return end
+	-- event.register("simulate", ArcherSim)
+end
+-- event.register("mouseButtonDown", controller.mouseButtonDown)
 
 return controller
