@@ -1,5 +1,7 @@
 # The Art of Archery
 
+Headshots & other marksman gameplay tweaks
+
 ## Features
 
 - Locational Damage but not really
