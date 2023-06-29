@@ -1,2 +1,2 @@
-local defaults = { logLevel = "INFO", headshotMessage = "GOTTEM!", disarmChance = 0.15 }
-return mwse.loadConfig("AaarrrcheREEE", defaults)
+local defaults = { logLevel = "INFO", headshotMessage = "GOTTEM!" }
+return mwse.loadConfig("The Art of Archery", defaults)

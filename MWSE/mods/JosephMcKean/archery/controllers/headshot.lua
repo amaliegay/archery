@@ -1,59 +1,7 @@
-local controller = {}
+local logging = require("JosephMcKean.archery.logging")
+local log = logging.createLogger("headshot")
 
 local config = require("JosephMcKean.archery.config")
-
-local logging = require("JosephMcKean.archery.logging")
-local log = logging.createLogger("controller")
-
----@class ArcheryTweaks.uiids
-local uiids = { menuMulti = tes3ui.registerID("MenuMulti"), weaponBorder = tes3ui.registerID("MenuMulti_weapon_border") }
-
----@return boolean
----@return number
-local function getMarksmanEquipment()
-	if tes3.mobilePlayer.readiedAmmo then
-		if tes3.mobilePlayer.readiedAmmo.object.type == tes3.weaponType.marksmanThrown then
-			return true, tes3.mobilePlayer.readiedAmmoCount
-		elseif tes3.mobilePlayer.readiedAmmo.object.type == tes3.weaponType.arrow then
-			if tes3.getEquippedItem({ actor = tes3.player, objectType = tes3.objectType.weapon, type = tes3.weaponType.marksmanBow }) then
-				return true, tes3.mobilePlayer.readiedAmmoCount
-			elseif tes3.getEquippedItem({ actor = tes3.player, objectType = tes3.objectType.weapon, type = tes3.weaponType.marksmanCrossbow }) then
-				return true, 0
-			end
-		elseif tes3.mobilePlayer.readiedAmmo.object.type == tes3.weaponType.bolt then
-			if tes3.getEquippedItem({ actor = tes3.player, objectType = tes3.objectType.weapon, type = tes3.weaponType.marksmanCrossbow }) then
-				return true, tes3.mobilePlayer.readiedAmmoCount
-			elseif tes3.getEquippedItem({ actor = tes3.player, objectType = tes3.objectType.weapon, type = tes3.weaponType.marksmanBow }) then
-				return true, 0
-			end
-		end
-	elseif tes3.getEquippedItem({ actor = tes3.player, objectType = tes3.objectType.weapon, type = tes3.weaponType.marksmanBow }) then
-		return true, 0
-	elseif tes3.getEquippedItem({ actor = tes3.player, objectType = tes3.objectType.weapon, type = tes3.weaponType.marksmanCrossbow }) then
-		return true, 0
-	end
-	return false, 0
-end
-
-local function createAmmoCountLabel()
-	local menuMulti = tes3ui.findMenu(uiids.menuMulti)
-	if not menuMulti then return end
-	local ammoCountLabel = menuMulti:findChild(uiids.weaponBorder):createLabel({ id = "MenuMulti_ammo_count_label" })
-	ammoCountLabel.absolutePosAlignX = 0.9
-	ammoCountLabel.absolutePosAlignY = 0.95
-	ammoCountLabel.color = { 0.875, 0.788, 0.624, 1.000 }
-	timer.start({
-		iterations = -1,
-		duration = 0.5,
-		callback = function()
-			local hasMarksmanWeaponEquipped, ammoCount = getMarksmanEquipment()
-			ammoCountLabel.visible = hasMarksmanWeaponEquipped
-			ammoCountLabel.text = tostring(ammoCount)
-		end,
-	})
-end
-
-function controller.loaded(e) createAmmoCountLabel() end
 
 ---Check if helmet is a closed helmet
 ---@param helmet tes3armor
@@ -90,24 +38,6 @@ local function helmetProtection(actor)
 		-- not wearing helmet takes additional 18.685 times damage
 	end
 	return math.clamp(16.4 * math.exp(-0.8 * (rating - 0.4)) - 3.9, 0, math.huge) ---@type number
-end
-
----@param actor tes3mobileActor|any
----@param equipment tes3equipmentStack?
-local function disarm(actor, equipment)
-	if not equipment then return end
-
-	local reference = actor.reference
-	if reference.baseObject.objectType ~= tes3.objectType.npc then return end
-
-	local equipmentItemData = equipment.itemData
-
-	-- Drop the equipment
-	if equipmentItemData then
-		log:trace("disarming %s", equipment.object.id)
-		local createdReference = tes3.dropItem({ reference = reference, item = equipment.object, itemData = equipmentItemData, count = equipmentItemData.count })
-		log:trace("dropped %s", createdReference)
-	end
 end
 
 ---@param actor tes3mobileActor|any
@@ -166,7 +96,7 @@ local bipNodeNames = {}
 local bipNodesData = {
 	["Head"] = { damageMultiFormula = helmetProtection, nodeOffset = tes3vector3.new(0, 0, 1), radiusApproxi = 1, message = config.headshotMessage },
 	["Neck"] = { damageMultiBase = 1.5, message = "A shot in the neck!" },
-	["Weapon"] = {
+	--[[["Weapon"] = {
 		damageMultiBase = 1.0,
 		radiusNode = "Bip01 R Hand",
 		radius = 7.86,
@@ -190,7 +120,7 @@ local bipNodesData = {
 			sound(actor)
 		end,
 		message = "A shot in the hand!",
-	},
+	},]]
 	["Left Knee"] = {
 		damageMultiFormula = greavesProtection,
 		nodeOffset = tes3vector3.new(0, 0, 6),
@@ -339,13 +269,24 @@ end
 ---Check if the distance from closest bip node to the arrow line is shorter than bip node radius.
 ---If so, apply additional damage
 ---@param e projectileHitActorEventData
-function controller.projectileHitActor(e)
-	log:debug("projectileHit %s", e.target)
+local function headshot(e)
+	local player = tes3.player
+	local firingReference = e.firingReference
+	local target = e.target
+	if firingReference == player and target == player then
+		log:trace("firingReference == player and target == player")
+		return
+	end
+	if firingReference ~= player and firingReference.mobile.actionData.target ~= player.mobile then
+		log:trace("firingReference ~= player and firingReference.mobile.actionData.target ~= player.mobile")
+		return
+	end
+	log:debug("projectileHit %s", target)
 	local closestBipNodeName, closestDistance = getClosestBipNode(e)
 	if closestBipNodeName == "" then return end
 	local bipNodeData = bipNodesData[closestBipNodeName]
 	--- Compatibility with Pincushion which attach arrow to body parts therefore changing worldBoundRadius
-	local bipNodeWorldBoundRadius = getBipNodeRadius(e.target, closestBipNodeName)
+	local bipNodeWorldBoundRadius = getBipNodeRadius(target, closestBipNodeName)
 	local radius = bipNodeData.radius
 	if not radius then
 		local radiusApproxi = bipNodeData.radiusApproxi or 0
@@ -362,54 +303,4 @@ function controller.projectileHitActor(e)
 	end
 end
 
----This is a hack and not reliable
----@param mobile tes3mobileCreature|tes3mobileNPC|tes3mobilePlayer
-local function getIfMoving(mobile) return mobile.isFalling or mobile.isJumping or mobile.isMovingBack or mobile.isMovingForward or mobile.isMovingLeft or mobile.isMovingRight or mobile.isRunning end
-
--- Store the damage value in reference data
----@param e damageEventData
-function controller.damage(e)
-	-- Check if the damage was caused by attack
-	if not e.source == tes3.damageSource.attack then return end
-
-	-- Check if the damage was caused by a projectile, but not by a spell, so it must be an arrow or a bolt
-	if not e.projectile or e.magicSourceInstance then return end
-
-	log:trace("before damage apply, health: %s", e.reference.mobile.health.current)
-	log:trace("damage: %s", e.damage)
-
-	-- if you're moving, you'll do 20% less damage.
-	local isMoving = getIfMoving(e.attacker)
-	if isMoving then
-		e.damage = (1 - 0.2) * e.damage
-		log:trace("after moving damage reduction: %s", e.damage)
-	end
-
-	-- Log the damage instead of double the damage since damage is before projectileHitActor
-	e.reference.data.archeryDamage = e.damage
-end
-
-local function getBowDrawFatigueCost() return 10 end
-
-local function ArcherSim(e)
-	local mobilePlayer = tes3.mobilePlayer
-	local actionData = mobilePlayer.actionData
-	if actionData.animationAttackState ~= 2 then return end
-	if mobilePlayer.fatigue.current > getBowDrawFatigueCost() then return end
-	actionData.animationAttackState = tes3.animationState.hit
-	tes3.messageBox({ message = "You are too fatigued to draw a bow!" })
-end
-
----@param e mouseButtonDownEventData
-function controller.mouseButtonDown(e)
-	if tes3ui.menuMode() then return end
-	if e.button ~= 0 then return end
-	if not tes3.mobilePlayer.weaponDrawn then return end
-	local readiedWeapon = tes3.mobilePlayer.readiedWeapon
-	if not readiedWeapon then return end
-	if readiedWeapon.object.type ~= tes3.weaponType.marksmanBow then return end
-	-- event.register("simulate", ArcherSim)
-end
--- event.register("mouseButtonDown", controller.mouseButtonDown)
-
-return controller
+return headshot

@@ -1,5 +1,5 @@
--- AaarrrcheREEE by JosephMcKean
-local mod = "AaarrrcheREEE"
+-- The Art of Archery by JosephMcKean
+local mod = "The Art of Archery"
 
 local logging = require("JosephMcKean.archery.logging")
 local log = logging.createLogger("main")

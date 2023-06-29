@@ -2,11 +2,9 @@
 
 ## Features
 
-- Locational Damage
+- Locational Damage but not really
     - Headshot, damage x0.0-18.6 depending on the target's helmet (if there is one)
     - Neck, x1.5
-    - Right hand, lower melee and ranged hit chance
-    - Left hand, lower magic cast chance
     - Arrow to the Knee, damage x0.0-5.0 depending on the target's greaves (if there is one), slowdown
 - Damage reduction 20% if the shooter is moving
 - Arrow Counter
@@ -33,3 +31,4 @@ All is free to use.
 Extras thanks to
 
 - [Hrnchamd](https://www.nexusmods.com/morrowind/users/843673), for coding help
+- [AxeMagister](https://www.nexusmods.com/morrowind/users/6545350), for coding help
