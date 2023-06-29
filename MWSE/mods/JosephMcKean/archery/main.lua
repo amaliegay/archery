@@ -9,3 +9,5 @@ event.register(tes3.event.initialized, function()
 	require("JosephMcKean.archery.events")
 	log:info("Initialized!")
 end)
+
+require("JosephMcKean.archery.mcm")
