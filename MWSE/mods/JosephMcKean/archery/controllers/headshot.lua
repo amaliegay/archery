@@ -41,19 +41,6 @@ local function helmetProtection(actor)
 end
 
 ---@param actor tes3mobileActor|any
-local function drainAttack(actor)
-	actor.attackBonus = actor.attackBonus - 15
-	timer.start({ duration = 15, callback = function() actor.attackBonus = actor.attackBonus + 15 end })
-	log:trace("drainAttack(%s)", actor.reference.id)
-end
-
----@param actor tes3mobileActor|any
-local function sound(actor)
-	tes3.applyMagicSource({ reference = actor, name = "Shot in the Hand", effects = { { id = tes3.effect.sound, duration = 15, min = 15, max = 15 } } })
-	log:trace("sound(%s)", actor.reference.id)
-end
-
----@param actor tes3mobileActor|any
 ---@return number duration
 local function greavesProtection(actor)
 	log:trace("greavesProtection(%s)", actor.reference.id)
@@ -93,9 +80,16 @@ local function slowdown(actor)
 end
 
 local bipNodeNames = {}
+---@class archery.bipNodeData
+---@field damageMultiFormula fun(actor: tes3mobileActor)
+---@field nodeOffset tes3vector3
+---@field radiusApproxi number
+---@field message string
+---@field radiusNode string
+---@type table<string, archery.bipNodeData>
 local bipNodesData = {
 	["Head"] = { damageMultiFormula = helmetProtection, nodeOffset = tes3vector3.new(0, 0, 1), radiusApproxi = 1, message = config.headshotMessage },
-	["Neck"] = { damageMultiBase = 1.5, useChild = true, message = "A shot in the neck!" },
+	["Neck"] = { damageMultiBase = 1.5, useChild = true, radiusApproxi = -2.8, message = "A shot in the neck!" },
 	["Left Knee"] = {
 		damageMultiFormula = greavesProtection,
 		nodeOffset = tes3vector3.new(0, 0, 6),
@@ -158,7 +152,8 @@ local function getClosestBipNode(e)
 		local bipNode = e.target.sceneNode:getObjectByName(bipNodeName) ---@cast bipNode niNode
 		log:trace("local bipNode = e.target.sceneNode:getObjectByName(%s)", bipNodeName)
 		if bipNode then
-			local offset = bipNodesData[bipNodeName].nodeOffset or tes3vector3.new()
+			local bipNodeData = bipNodesData[bipNodeName]
+			local offset = bipNodeData.nodeOffset or tes3vector3.new()
 			local distance = calcDistPointToLine({ point = bipNode.worldBoundOrigin + offset, lineInit = e.collisionPoint, lineDirection = e.mobile.velocity:normalized() })
 			if distance < closestDistance then
 				closestBipNodeName = bipNodeName
