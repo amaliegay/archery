@@ -3,10 +3,10 @@ name = "The Art of Archery - Deadly Headshots"
 description = "Headshots & other marksman gameplay tweaks"
 repository = "https://github.com/amaliegay/archery"
 authors = ["JosephMcKean"]
-version = "1.3.1"
+version = "1.3.3"
 
 [dependencies]
 assets = ["MWSE/mods/JosephMcKean/archery"]
 
 [dependencies.mwse]
-buildnumber = 3251
+buildnumber = 3263
