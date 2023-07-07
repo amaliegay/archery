@@ -95,32 +95,7 @@ end
 local bipNodeNames = {}
 local bipNodesData = {
 	["Head"] = { damageMultiFormula = helmetProtection, nodeOffset = tes3vector3.new(0, 0, 1), radiusApproxi = 1, message = config.headshotMessage },
-	["Neck"] = { damageMultiBase = 1.5, message = "A shot in the neck!" },
-	--[[["Weapon"] = {
-		damageMultiBase = 1.0,
-		radiusNode = "Bip01 R Hand",
-		radius = 7.86,
-		additionalEffectChance = 1,
-		---@param actor tes3mobileActor
-		additionalEffect = function(actor)
-			-- log:trace("apply disarm weapon effect")
-			-- disarm(actor, actor.readiedWeapon)
-			drainAttack(actor)
-		end,
-		message = "A shot in the hand!",
-	},
-	["Bip01 L Finger1"] = {
-		damageMultiBase = 1.0,
-		radiusNode = "Bip01 L Hand",
-		radius = 7.86,
-		additionalEffectChance = 1,
-		---@param actor tes3mobileActor
-		additionalEffect = function(actor)
-			-- disarm(actor, actor.torchSlot) 
-			sound(actor)
-		end,
-		message = "A shot in the hand!",
-	},]]
+	["Neck"] = { damageMultiBase = 1.5, useChild = true, message = "A shot in the neck!" },
 	["Left Knee"] = {
 		damageMultiFormula = greavesProtection,
 		nodeOffset = tes3vector3.new(0, 0, 6),
@@ -200,20 +175,49 @@ end
 ---@return number
 local function getBipNodeRadius(ref, bipNodeName)
 	log:trace("getBipNodeRadius(%s, %s)", ref, bipNodeName)
-	if not ref.data.bipNodesWorldBoundRadius then
-		ref.data.bipNodesWorldBoundRadius = {}
+	if not ref.data.bipNodesRadius then
+		ref.data.bipNodesRadius = {}
 		for bnName, bipNodeData in pairs(bipNodesData) do
 			if not bipNodeData.radius then
 				local name = bipNodeData.radiusNode or bnName
 				local bp = ref.sceneNode:getObjectByName(name)
+				if bipNodeData.useChild then bp = bp.children[1] end
 				log:trace("bp = %s", bp)
 				log:trace("bp.worldBoundRadius = %s", bp and bp.worldBoundRadius)
-				ref.data.bipNodesWorldBoundRadius[name] = bp and bp.worldBoundRadius
+				ref.data.bipNodesRadius[name] = bp and bp.worldBoundRadius
 			end
 		end
 	end
 	bipNodeName = bipNodesData[bipNodeName] and bipNodesData[bipNodeName].radiusNode or bipNodeName
-	return ref.data.bipNodesWorldBoundRadius[bipNodeName]
+	return ref.data.bipNodesRadius[bipNodeName]
+end
+
+---Check if the distance from closest bip node to the arrow line is shorter than bip node radius.
+---@param e projectileHitActorEventData
+---@return boolean wasHit 
+---@return string? closestBipNodeName
+---@return string? message
+local function ifHit(e)
+	local closestBipNodeName, closestDistance = getClosestBipNode(e)
+	if closestBipNodeName == "" then return false, nil, nil end
+	local bipNodeData = bipNodesData[closestBipNodeName]
+	local radius = bipNodeData.radius
+	if not radius then
+		local radiusApproxi = bipNodeData.radiusApproxi or 0
+		radius = getBipNodeRadius(e.target, closestBipNodeName) + radiusApproxi
+	end
+	log:trace("closest distance to %s = %s", closestBipNodeName, closestDistance)
+	log:trace("%s radius = %s", closestBipNodeName, radius)
+	local wasHit = closestDistance <= radius
+	return wasHit, closestBipNodeName, bipNodeData.message
+end
+
+---@param bipNodeName string
+---@return boolean
+local function showMessage(bipNodeName)
+	if not config.showMessages then return false end
+	if config.onlyHeadshotMessage and bipNodeName ~= "Head" then return false end
+	return true
 end
 
 ---@param actor tes3mobileActor
@@ -266,38 +270,17 @@ local function applyEffect(e, bipNodeName)
 	timer.delayOneFrame(function() additionalEffect(actor) end, timer.real)
 end
 
----Check if the distance from closest bip node to the arrow line is shorter than bip node radius.
----If so, apply additional damage
+---If target is hit in certain area, apply additional damage
 ---@param e projectileHitActorEventData
 local function headshot(e)
-	local player = tes3.player
 	local firingReference = e.firingReference
 	local target = e.target
-	if firingReference == player and target == player then
-		log:trace("firingReference == player and target == player")
-		return
-	end
-	if firingReference ~= player and firingReference.mobile.actionData.target ~= player.mobile then
-		log:trace("firingReference ~= player and firingReference.mobile.actionData.target ~= player.mobile")
-		return
-	end
-	log:debug("projectileHit %s", target)
-	local closestBipNodeName, closestDistance = getClosestBipNode(e)
-	if closestBipNodeName == "" then return end
-	local bipNodeData = bipNodesData[closestBipNodeName]
-	--- Compatibility with Pincushion which attach arrow to body parts therefore changing worldBoundRadius
-	local bipNodeWorldBoundRadius = getBipNodeRadius(target, closestBipNodeName)
-	local radius = bipNodeData.radius
-	if not radius then
-		local radiusApproxi = bipNodeData.radiusApproxi or 0
-		radius = bipNodeWorldBoundRadius + radiusApproxi
-	end
-	log:trace("closest distance to %s = %s", closestBipNodeName, closestDistance)
-	log:trace("%s radius = %s", closestBipNodeName, radius)
-	if closestDistance <= radius then
-		local message = bipNodeData.message
+	if firingReference == target then return end
+	log:trace("projectileHit: firingReference = %s, target = %s", firingReference, target)
+	local wasHit, closestBipNodeName, message = ifHit(e)
+	if wasHit and closestBipNodeName and message then
 		log:debug(message)
-		tes3.messageBox(message)
+		if firingReference == tes3.player and showMessage(closestBipNodeName) then tes3.messageBox(message) end
 		applyDamage(e, closestBipNodeName)
 		applyEffect(e, closestBipNodeName)
 	end
