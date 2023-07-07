@@ -237,10 +237,10 @@ local function applyDamage(e, bipNodeName)
 	log:trace("applyDamage(e, %s)", bipNodeName)
 	local actor = e.target.mobile ---@cast actor tes3mobileActor|any
 	if actor.isDead then return end
-	if not e.target.data.archeryDamage then return end
+	if not e.target.tempData.archeryDamage then return end
 	local multi = getDamageMulti(actor, bipNodeName)
 	if multi > 0 then
-		local damage = multi * e.target.data.archeryDamage ---@type number
+		local damage = multi * e.target.tempData.archeryDamage ---@type number
 		local playerAttack = e.firingReference == tes3.player
 		timer.delayOneFrame(function()
 			local results = actor:applyDamage({ damage = damage, applyDifficulty = true, playerAttack = playerAttack })
