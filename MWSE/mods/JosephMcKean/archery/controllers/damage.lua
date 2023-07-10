@@ -1,5 +1,6 @@
 local logging = require("JosephMcKean.archery.logging")
 local log = logging.createLogger("damage")
+local config = require("JosephMcKean.archery.config")
 
 -- Store the damage value in reference tempData
 ---@param e damageEventData
@@ -14,10 +15,12 @@ local function damage(e)
 	log:trace("damage: %s", e.damage)
 
 	-- if you're moving, you'll do 20% less damage.
-	local attackerReference = e.attackerReference
-	if attackerReference.tempData.isMoving then
-		e.damage = (1 - 0.2) * e.damage
-		log:trace("after moving damage reduction: %s", e.damage)
+	if config.enableDamageReduction then
+		local attackerReference = e.attackerReference
+		if attackerReference.tempData.isMoving then
+			e.damage = (1 - 0.2) * e.damage
+			log:trace("after moving damage reduction: %s", e.damage)
+		end
 	end
 
 	-- Log the damage instead of double the damage since damage is before projectileHitActor

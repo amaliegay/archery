@@ -1,3 +1,5 @@
+local config = require("JosephMcKean.archery.config")
+
 ---@class ArcheryTweaks.uiids
 local uiids = { menuMulti = tes3ui.registerID("MenuMulti"), weaponBorder = tes3ui.registerID("MenuMulti_weapon_border") }
 
@@ -40,7 +42,7 @@ local function createAmmoCountLabel()
 		duration = 0.5,
 		callback = function()
 			local hasMarksmanWeaponEquipped, ammoCount = getMarksmanEquipment()
-			ammoCountLabel.visible = hasMarksmanWeaponEquipped
+			ammoCountLabel.visible = config.enableArrowCounter and hasMarksmanWeaponEquipped
 			ammoCountLabel.text = tostring(ammoCount)
 		end,
 	})
