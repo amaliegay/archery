@@ -182,7 +182,10 @@ end
 local function headshot(e)
 	local firingReference = e.firingReference
 	local targetRef = e.target
-	if firingReference == targetRef then return end
+	if firingReference == targetRef then
+		log:trace("projectileHit: firingReference == target = %s", firingReference)
+		return
+	end
 	log:trace("projectileHit: firingReference = %s, target = %s", firingReference, targetRef)
 	local targetObj = e.target.baseObject
 	local bipNodesData = supportedCreatures[targetObj.mesh:lower()] or defaults

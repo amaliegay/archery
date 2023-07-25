@@ -4,14 +4,14 @@ local log = logging.createLogger("bipNodesData")
 local config = require("JosephMcKean.archery.config")
 
 ---@class archery.bipNodeData
----@field damageMultiFormula fun(actor: tes3mobileActor)
----@field damageMultiBase number
----@field nodeOffset tes3vector3
----@field radiusApproxi number
----@field radius number
----@field radiusNode string
----@field useChild boolean
----@field message string
+---@field damageMultiFormula fun(actor: tes3mobileActor)?
+---@field damageMultiBase number?
+---@field nodeOffset tes3vector3?
+---@field radiusApproxi number?
+---@field radius number?
+---@field radiusNode string?
+---@field useChild boolean?
+---@field message string?
 ---@field additionalEffect fun(actor: tes3mobileActor)?
 ---@field additionalEffectChance number?
 
