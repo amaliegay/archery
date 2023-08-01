@@ -51,12 +51,11 @@ end
 ---@return string closestBipNodeName 
 ---@return number closestDistance 
 local function getClosestBipNode(e, bipNodesData)
-	log:trace("getClosestBipNode(e)")
+	log:trace("getClosestBipNode()")
 	local closestBipNodeName = ""
 	local closestDistance = math.huge
 	for _, bipNodeName in ipairs(getBipNodeNames(bipNodesData)) do
 		local bipNode = e.target.sceneNode:getObjectByName(bipNodeName) ---@cast bipNode niNode
-		log:trace("local bipNode = e.target.sceneNode:getObjectByName(%s)", bipNodeName)
 		if bipNode then
 			local bipNodeData = bipNodesData[bipNodeName]
 			local offset = bipNodeData.nodeOffset or tes3vector3.new()
@@ -67,6 +66,7 @@ local function getClosestBipNode(e, bipNodesData)
 			end
 		end
 	end
+	if closestBipNodeName ~= "" then log:debug("%s is the closest bipNode", closestBipNodeName) end
 	return closestBipNodeName, closestDistance
 end
 
@@ -76,17 +76,20 @@ end
 ---@param bipNodeName string
 ---@return number
 local function getBipNodeRadius(ref, bipNodesData, bipNodeName)
-	log:trace("getBipNodeRadius(%s, %s)", ref, bipNodeName)
+	log:debug("getBipNodeRadius(%s, %s)", ref, bipNodeName)
 	if not ref.data.bipNodesRadius then
+		log:trace("bipNodesRadius data doesn't exist for reference %s, initializing new radius data", ref.id)
 		ref.data.bipNodesRadius = {}
 		for bnName, bipNodeData in pairs(bipNodesData) do
 			if not bipNodeData.radius then
 				local name = bipNodeData.radiusNode or bnName
 				local bp = ref.sceneNode:getObjectByName(name)
-				if bipNodeData.useChild then bp = bp.children[1] end
-				log:trace("bp = %s", bp)
-				log:trace("bp.worldBoundRadius = %s", bp and bp.worldBoundRadius)
-				ref.data.bipNodesRadius[name] = bp and bp.worldBoundRadius
+				if bp then
+					if bipNodeData.useChild then bp = bp.children[1] end
+					log:trace("bp = %s", bp)
+					log:trace("bp.worldBoundRadius = %s", bp and bp.worldBoundRadius)
+					ref.data.bipNodesRadius[name] = bp and bp.worldBoundRadius
+				end
 			end
 		end
 	end
@@ -101,13 +104,16 @@ end
 ---@return string? closestBipNodeName
 ---@return string? message
 local function ifHit(e, bipNodesData)
+	log:debug("calculating if the projectile hit any bip node")
 	local closestBipNodeName, closestDistance = getClosestBipNode(e, bipNodesData)
 	if closestBipNodeName == "" then return false, nil, nil end
 	local bipNodeData = bipNodesData[closestBipNodeName]
 	local radius = bipNodeData.radius
 	if not radius then
+		radius = getBipNodeRadius(e.target, bipNodesData, closestBipNodeName)
+		if not radius then return false, nil, nil end
 		local radiusApproxi = bipNodeData.radiusApproxi or 0
-		radius = getBipNodeRadius(e.target, bipNodesData, closestBipNodeName) + radiusApproxi
+		radius = radius + radiusApproxi
 	end
 	log:trace("closest distance to %s = %s", closestBipNodeName, closestDistance)
 	log:trace("%s radius = %s", closestBipNodeName, radius)
@@ -183,10 +189,10 @@ local function headshot(e)
 	local firingReference = e.firingReference
 	local targetRef = e.target
 	if firingReference == targetRef then
-		log:trace("projectileHit: firingReference == target = %s", firingReference)
+		log:trace("projectileHitActor event firingReference and target are the same: %s", firingReference)
 		return
 	end
-	log:trace("projectileHit: firingReference = %s, target = %s", firingReference, targetRef)
+	log:debug("%s shot projectile hit target %s", firingReference, targetRef)
 	local targetObj = e.target.baseObject
 	local bipNodesData = supportedCreatures[targetObj.mesh:lower()] or defaults
 	local wasHit, closestBipNodeName, message = ifHit(e, bipNodesData)
